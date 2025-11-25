@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Responsive To‑Do List</title>
+  <style>
+    /* Simple reset */
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%}
+    body{
+      font-family:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg,#f7f9fc,#eef4ff);
+      display:flex;align-items:center;justify-content:center;
+      padding:24px;
+    }
+
+    .app{
+      width:100%;max-width:720px;background:#fff;border-radius:14px;box-shadow:0 10px 30px rgba(20,30,50,0.08);
+      padding:20px;display:flex;flex-direction:column;gap:16px;
+    }
+
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    header h1{font-size:1.25rem;color:#0f172a}
+    .subtitle{font-size:0.85rem;color:#475569}
+
+    .input-row{display:flex;gap:8px}
+    .input-row input{
+      flex:1;padding:12px 14px;border-radius:10px;border:1px solid #e6eef8;font-size:1rem;
+      outline:none;background:#fbfdff
+    }
+    .input-row input:focus{box-shadow:0 0 0 4px rgba(59,130,246,0.06);border-color:#93c5fd}
+    .btn{padding:10px 14px;border-radius:10px;border:none;background:#2563eb;color:#fff;font-weight:600;cursor:pointer}
+    .btn:active{transform:translateY(1px)}
+    .btn.secondary{background:#f1f5f9;color:#0f172a}
+
+    .list{display:flex;flex-direction:column;gap:8px}
+    .task{
+      display:flex;align-items:center;gap:12px;padding:10px;border-radius:10px;border:1px solid #f1f5f9;background:#fcfeff
+    }
+    .task.completed{opacity:0.6;text-decoration:line-through}
+    .task .title{flex:1}
+    .task button{background:transparent;border:none;cursor:pointer;padding:6px;border-radius:8px}
+
+    .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .small{font-size:0.85rem;color:#475569}
+
+    .empty{padding:20px;border-radius:8px;border:1px dashed #e6eef8;background:#fbfdff;text-align:center;color:#94a3b8}
+
+    footer{display:flex;justify-content:space-between;align-items:center;gap:8px}
+
+    /* Responsive tweaks */
+    @media (max-width:480px){
+      .app{padding:12px}
+      header h1{font-size:1rem}
+      .btn{padding:8px 10px}
+    }
+
+  </style>
+</head>
+<body>
+  <main class="app" role="application" aria-labelledby="app-title">
+    <header>
+      <div>
+        <h1 id="app-title">To‑Do List</h1>
+        <div class="subtitle">Simple, responsive & saved in your browser</div>
+      </div>
+      <div class="small" id="task-count">0 tasks</div>
+    </header>
+
+    <section class="input-row" aria-label="Add new task">
+      <input id="task-input" placeholder="Add a new task and press Enter" aria-label="Task description" />
+      <button class="btn" id="add-btn">Add</button>
+    </section>
+
+    <section class="controls" aria-label="Actions">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn secondary" id="filter-all">All</button>
+        <button class="btn secondary" id="filter-active">Active</button>
+        <button class="btn secondary" id="filter-completed">Completed</button>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="btn secondary" id="clear-completed">Clear completed</button>
+        <button class="btn secondary" id="clear-all">Clear all</button>
+      </div>
+    </section>
+
+    <section class="list" id="task-list" aria-live="polite"></section>
+
+    <div class="empty" id="empty-msg" hidden>Nothing here — add your first task!</div>
+
+    <footer>
+      <div class="small">Tip: double‑click a task to edit it</div>
+      <div class="small">LocalStorage enabled</div>
+    </footer>
+  </main>
+
+  <script>
+    // Simple, well-commented JS for the to-do app
+    (function(){
+      const STORAGE_KEY = 'todo_tasks_v1';
+      let tasks = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      let filter = 'all'; // all | active | completed
+
+      // DOM refs
+      const input = document.getElementById('task-input');
+      const addBtn = document.getElementById('add-btn');
+      const list = document.getElementById('task-list');
+      const emptyMsg = document.getElementById('empty-msg');
+      const taskCount = document.getElementById('task-count');
+
+      // Filters
+      document.getElementById('filter-all').addEventListener('click',()=>{filter='all'; render();});
+      document.getElementById('filter-active').addEventListener('click',()=>{filter='active'; render();});
+      document.getElementById('filter-completed').addEventListener('click',()=>{filter='completed'; render();});
+
+      // Clear buttons
+      document.getElementById('clear-completed').addEventListener('click',()=>{
+        tasks = tasks.filter(t=>!t.completed); saveAndRender();
+      });
+      document.getElementById('clear-all').addEventListener('click',()=>{
+        if(confirm('Clear all tasks?')){ tasks=[]; saveAndRender(); }
+      });
+
+      // Add task on button or Enter
+      addBtn.addEventListener('click',addFromInput);
+      input.addEventListener('keydown',e=>{ if(e.key==='Enter') addFromInput(); });
+
+      function addFromInput(){
+        const txt = input.value.trim();
+        if(!txt) return; // ignore empty
+        const newTask = {id:Date.now().toString(), title:txt, completed:false};
+        tasks.unshift(newTask); // newest first
+        input.value='';
+        saveAndRender();
+      }
+
+      function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); }
+      function saveAndRender(){ save(); render(); }
+
+      function render(){
+        // Apply filter
+        let shown = tasks;
+        if(filter==='active') shown = tasks.filter(t=>!t.completed);
+        if(filter==='completed') shown = tasks.filter(t=>t.completed);
+
+        // Update count
+        taskCount.textContent = `${tasks.length} task${tasks.length===1?'':'s'}`;
+
+        // Render list
+        list.innerHTML='';
+        if(shown.length===0){ emptyMsg.hidden=false; }
+        else{ emptyMsg.hidden=true; }
+
+        shown.forEach(task=>{
+          const item = document.createElement('div');
+          item.className = 'task' + (task.completed ? ' completed' : '');
+          item.dataset.id = task.id;
+
+          const checkbox = document.createElement('input');
+          checkbox.type='checkbox';
+          checkbox.checked = task.completed;
+          checkbox.addEventListener('change',()=>{ task.completed = checkbox.checked; saveAndRender(); });
+
+          const title = document.createElement('div');
+          title.className='title';
+          title.textContent = task.title;
+          title.tabIndex=0;
+
+          // Double-click to edit
+          title.addEventListener('dblclick',()=> startEdit(task, title));
+
+          // Allow Enter while focused to start edit
+          title.addEventListener('keydown',(e)=>{ if(e.key==='Enter') startEdit(task, title); });
+
+          const editBtn = document.createElement('button');
+          editBtn.title='Edit';
+          editBtn.innerHTML='✏️';
+          editBtn.addEventListener('click',()=> startEdit(task, title));
+
+          const deleteBtn = document.createElement('button');
+          deleteBtn.title='Delete';
+          deleteBtn.innerHTML='🗑️';
+          deleteBtn.addEventListener('click',()=>{ if(confirm('Delete this task?')){ tasks = tasks.filter(t=>t.id!==task.id); saveAndRender(); } });
+
+          item.appendChild(checkbox);
+          item.appendChild(title);
+          item.appendChild(editBtn);
+          item.appendChild(deleteBtn);
+
+          list.appendChild(item);
+        });
+      }
+
+      function startEdit(task, titleElem){
+        const input = document.createElement('input');
+        input.type='text';
+        input.value=task.title;
+        input.style.width='100%';
+        input.addEventListener('keydown',(e)=>{
+          if(e.key==='Enter') finishEdit();
+          if(e.key==='Escape') cancelEdit();
+        });
+        input.addEventListener('blur', finishEdit);
+
+        titleElem.replaceWith(input);
+        input.focus();
+
+        function finishEdit(){
+          const v = input.value.trim();
+          if(v){ task.title = v; }
+          else{ tasks = tasks.filter(t=>t.id!==task.id); }
+          saveAndRender();
+        }
+        function cancelEdit(){ saveAndRender(); }
+      }
+
+      // initial render
+      render();
+
+      // expose for debugging (optional)
+      window._todo = {get tasks(){return tasks}, clear:()=>{tasks=[];saveAndRender()}};
+    })();
+  </script>
+
+  <!--
+  Brief comment after code:
+  This is a lightweight, responsive to-do list app that stores tasks in localStorage. It supports adding, editing (double-click), completing, filtering and clearing tasks. The layout is mobile-first and adjusts at small widths. The script is intentionally compact and commented for learning.
+
+  README (included here so you have everything in one file)
+  -------------------------------------------------------
+  # Responsive To-Do List
+
+  ## What this is
+  A single-file responsive To-Do list app (HTML/CSS/JS). It stores tasks in the browser's localStorage so they persist across page reloads.
+
+  ## Features
+  - Add tasks (press Enter or click Add)
+  - Edit tasks (double-click a task or click the ✏️ button)
+  - Mark complete with checkbox
+  - Filter: All / Active / Completed
+  - Clear completed or clear all
+  - Responsive layout for mobile and desktop
+
+  ## How to use
+  1. Save this file as `index.html`.
+  2. Open it in any modern browser (Chrome, Firefox, Edge, Safari).
+
+  ## Notes for developers
+  - Tasks are saved under the localStorage key `todo_tasks_v1`.
+  - The code is intentionally simple and written for clarity. You can extend it by adding drag-and-drop reorder, due dates, categories, or syncing to a backend.
+
+  ## License
+  MIT — feel free to use and modify.
+  -->
+
+</body>
+</html>
